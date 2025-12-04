@@ -13,7 +13,10 @@ Building a Product Information Management (PIM) system for ~1,000 products with 
 - **Authentication**: Auth0 with Google OAuth
 - **External Integrations**:
   - Shopify Admin GraphQL API
-  - Video encoding API (TBD - awaiting details)
+  - Video encoding GraphQL API (upload via URL, query by name)
+- **Media Processing Libraries**:
+  - Image editing: `react-image-crop` + `sharp` (crop, resize, rotate)
+  - Video editing: `ffmpeg.js` or `remotion` (trim, stitch intro/outro)
 
 ### Key Design Decisions
 
@@ -416,7 +419,21 @@ CREATE INDEX idx_audit_logs_created ON audit_logs(created_at);
    - Show image metadata (dimensions, size)
    - Allow alt text editing
 
-**Deliverable**: Can upload images and videos, view in library, edit metadata
+5. **Image Editing Tools**
+   - Integrate `react-image-crop` component
+   - Build backend endpoint with `sharp` for processing
+   - Implement crop, resize, rotate operations
+   - Save edited version to Storj
+   - Preview edited image before saving
+
+6. **Video Editing Tools**
+   - Set up `fluent-ffmpeg` on backend (requires ffmpeg binary)
+   - Build trim/cut endpoint (specify start/end timestamps)
+   - Build stitch endpoint (combine intro/video/outro)
+   - Create video preview player
+   - Save edited version to Storj
+
+**Deliverable**: Can upload images and videos, view in library, edit metadata, perform basic editing
 
 ### Phase 4: Product-Media Association (Week 4)
 **Goal**: Connect media assets to products
@@ -473,11 +490,14 @@ CREATE INDEX idx_audit_logs_created ON audit_logs(created_at);
 **Goal**: Handle video encoding workflow
 
 1. **Video Encoding Service**
-   - Integrate with external encoding API (details TBD)
-   - Build job submission
-   - Implement webhook receiver for encoding completion
-   - Create polling mechanism as fallback
-   - Store encoded video URLs
+   - Create GraphQL client for encoding API
+   - Build upload endpoint (get upload URL from API, upload edited video)
+   - Generate unique video names (e.g., `product-{shopify_id}-{timestamp}`)
+   - Submit video with name for encoding
+   - Implement polling mechanism to query video by name
+   - Parse response to extract encoded video URL
+   - Store encoded URL in `media_assets.encoded_video_url`
+   - Update workflow state to 'encoded'
 
 2. **Video Workflow UI**
    - Create video upload flow (raw → edited)
@@ -606,32 +626,80 @@ CREATE INDEX idx_audit_logs_created ON audit_logs(created_at);
 - Cache Shopify data with appropriate TTL
 - Implement exponential backoff for retries
 
+## Media Editing Features
+
+### Image Editing (Built-in, Basic)
+**Libraries**: `react-image-crop` (frontend) + `sharp` (backend processing)
+
+**Features**:
+- Crop to custom dimensions or aspect ratios
+- Resize/scale
+- Rotate (90°, 180°, 270°)
+- Preview before save
+- Non-destructive (keeps original raw file)
+
+**Implementation**:
+- Frontend: React component with `react-image-crop` for interactive cropping
+- Backend: `sharp` library to process and save edited version
+- Store both raw and edited versions in Storj
+- Update `media_assets.edited_file_url` on save
+
+### Video Editing (Built-in, Basic)
+**Libraries**: `ffmpeg.wasm` (browser-based) or `fluent-ffmpeg` (server-side)
+
+**Features**:
+- Trim start/end (cut beginning and end)
+- Stitch intro/outro clips (add leadins/leadouts)
+- Preview trimmed video
+- Non-destructive (keeps original raw file)
+
+**Implementation**:
+- Option 1: `ffmpeg.wasm` - runs in browser, no server load, slower for large files
+- Option 2: `fluent-ffmpeg` on backend - faster, requires ffmpeg binary on server
+- Recommended: Use `fluent-ffmpeg` on backend for better performance
+- Store raw, edited, and encoded versions separately
+- Update workflow: raw → edited (trimmed/stitched) → submit for encoding → encoded
+
+**Video Workflow Enhancement**:
+```
+1. Upload raw video → Storj (raw_file_url)
+2. Download, trim/stitch in PIM → Save edited version (edited_file_url)
+3. Submit edited version to encoding API with name
+4. Poll/query encoding API by name for completion
+5. Retrieve encoded URL → Store in encoded_video_url
+6. Mark as ready_for_publish → Publish to Shopify
+```
+
+### Video Encoding API Integration
+**API Type**: GraphQL
+**Upload**: Video file uploaded to provided URL
+**Tracking**: Videos queryable by name (given at upload time)
+**Workflow**: Query for video by name to check encoding status and retrieve final URL
+
+**Implementation**:
+- Create GraphQL client for encoding API
+- Upload edited video with unique name (e.g., `product-{shopify_id}-{timestamp}`)
+- Store encoding job name in `media_assets.encoding_job_id`
+- Poll API periodically to query video by name
+- Update `media_assets.encoded_video_url` when complete
+- Update `media_assets.workflow_state` to 'encoded'
+
 ## Open Questions / TBD
 
-1. **Video Encoding API Details**
-   - What is the API provider?
-   - Authentication method?
-   - Webhook vs. polling for job completion?
-   - Input/output formats?
-
-2. **Collection Media**
+1. **Collection Media**
    - Do you need collection management now or future phase?
    - Should collections be imported from Shopify?
 
-3. **Variant Options**
+2. **Variant Options**
    - How many option dimensions? (Shopify supports 3 max: option1, option2, option3)
    - Should option names/values be editable in PIM?
 
-4. **Image Editing**
-   - Should PIM include built-in image editing (crop, resize, filters)?
-   - Or just upload/download for editing in external tools?
-
-5. **Backup Strategy**
+3. **Backup Strategy**
    - Automated database backups via Supabase
    - Storj versioning enabled?
    - Point-in-time recovery requirements?
 
-6. **Monitoring & Alerts**
+4. **Monitoring & Alerts**
    - Error tracking (Sentry, LogRocket)?
    - Uptime monitoring?
    - Alert on sync failures?
