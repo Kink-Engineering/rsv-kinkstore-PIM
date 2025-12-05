@@ -27,6 +27,7 @@ erDiagram
         varchar product_type
         text[] tags
         varchar status
+        jsonb metadata "Shopify metafields (see below)"
         timestamp created_at
         timestamp updated_at
     }
@@ -139,6 +140,22 @@ erDiagram
 | **FK** | Foreign Key |
 | **(UNIQUE)** in comment | Foreign Key that is also Unique (one-to-one relationship) |
 
+### Product Metafields (Shopify Custom Fields)
+
+The following **product-level metafields** are used in Shopify and stored in `products.metadata` (JSONB):
+
+| Metafield | Description |
+|-----------|-------------|
+| `KS ID Product Group` | Internal product grouping identifier |
+| `KS ID Product Type` | Internal product type identifier |
+| `KS Collection ID Number` | Collection identifier |
+| `Key Features` | Product feature highlights |
+| `Key Benefits` | Product benefit highlights |
+| `Custom Message` | Custom product messaging |
+| `Review` | Product review content |
+
+**Note**: Variant metafields are not currently used.
+
 ## Key Relationships Explained
 
 ### 1. Product ↔ Variants (One-to-Many)
@@ -169,8 +186,8 @@ erDiagram
   - Which image is the hero (position = 1 for product-level)
   - Which videos are associated with a product
   - Variant-specific hero images (when `variant_id` is set)
-- **UI Behavior**: Images from the matching SKU bucket are highlighted/suggested, but users can choose any image
-- **Future flexibility**: Buckets may exist without products; publishing points may expand beyond products
+- **UI Behavior**: Images from the SKU bucket matching the product are highlighted/suggested for publication, but users can choose any image from any bucket.
+- **Future flexibility**: Buckets may exist without products (example unique label "LEATHER SHOTS"); publishing points may later expand beyond products
 
 ### 5. Media Workflow States
 ```
