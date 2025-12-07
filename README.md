@@ -99,6 +99,14 @@ One-time migration of existing media from Google Drive.
 | 5.2 Import Service | Download, upload to Storj, map | [KIN-23](https://linear.app/kink/issue/KIN-23) |
 | 5.3 Import UI | Wizard, progress, error handling | [KIN-24](https://linear.app/kink/issue/KIN-24) |
 
+### Phase 5b: Initial Media Association Population (Week 5)
+Populate `product_media_associations` based on what's already published in Shopify.
+
+| Task | Description | Linear |
+|------|-------------|--------|
+| 5b.1 Image Association Population | Query Shopify, match filenames, create associations | [KIN-36](https://linear.app/kink/issue/KIN-36) |
+| 5b.2 Video Association Population | Query encoding API, parse descriptions, create associations | [KIN-37](https://linear.app/kink/issue/KIN-37) |
+
 ### Phase 6: Video Encoding Integration (Week 6)
 Handle video encoding workflow with external service.
 
