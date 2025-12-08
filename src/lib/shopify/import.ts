@@ -134,6 +134,8 @@ async function importProduct(
   for (const { node: variant } of product.variants.edges) {
     const shopifyVariantId = extractShopifyId(variant.id)
     
+    const weight = variant.inventoryItem?.measurement?.weight
+    
     const { error: variantError } = await supabase
       .from('product_variants')
       .upsert({
@@ -143,8 +145,8 @@ async function importProduct(
         title: variant.title,
         price: parseFloat(variant.price),
         compare_at_price: variant.compareAtPrice ? parseFloat(variant.compareAtPrice) : null,
-        weight: variant.weight,
-        weight_unit: variant.weightUnit ? convertWeightUnit(variant.weightUnit) : null,
+        weight: weight?.value ?? null,
+        weight_unit: weight?.unit ? convertWeightUnit(weight.unit) : null,
         inventory_quantity: variant.inventoryQuantity,
         position: variant.position,
         option1: variant.selectedOptions[0]?.value || null,

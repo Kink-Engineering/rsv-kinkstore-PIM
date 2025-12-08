@@ -34,13 +34,19 @@ export const PRODUCT_FRAGMENT = `
           sku
           price
           compareAtPrice
-          weight
-          weightUnit
           inventoryQuantity
           position
           selectedOptions {
             name
             value
+          }
+          inventoryItem {
+            measurement {
+              weight {
+                value
+                unit
+              }
+            }
           }
         }
       }
@@ -151,14 +157,20 @@ export interface ShopifyVariant {
   sku: string | null
   price: string
   compareAtPrice: string | null
-  weight: number | null
-  weightUnit: 'KILOGRAMS' | 'GRAMS' | 'POUNDS' | 'OUNCES'
   inventoryQuantity: number | null
   position: number
   selectedOptions: Array<{
     name: string
     value: string
   }>
+  inventoryItem?: {
+    measurement?: {
+      weight?: {
+        value: number
+        unit: 'KILOGRAMS' | 'GRAMS' | 'POUNDS' | 'OUNCES'
+      }
+    }
+  }
 }
 
 export interface GetProductsResponse {
@@ -194,8 +206,10 @@ export function extractShopifyId(gid: string): number {
 }
 
 // Helper to convert weight unit
-export function convertWeightUnit(unit: ShopifyVariant['weightUnit']): string {
-  const map: Record<string, string> = {
+type WeightUnit = 'KILOGRAMS' | 'GRAMS' | 'POUNDS' | 'OUNCES'
+
+export function convertWeightUnit(unit: WeightUnit): string {
+  const map: Record<WeightUnit, string> = {
     KILOGRAMS: 'kg',
     GRAMS: 'g',
     POUNDS: 'lb',
