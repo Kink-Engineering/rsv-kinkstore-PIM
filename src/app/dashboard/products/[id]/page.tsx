@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { use, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 interface Variant {
@@ -40,8 +40,9 @@ interface ProductDetail {
   variants: Variant[]
 }
 
-export default function ProductDetailPage({ params }: { params: { id: string } }) {
+export default function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
+  const { id } = use(params)
   const [product, setProduct] = useState<ProductDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -52,7 +53,7 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
       setLoading(true)
       setError(null)
       try {
-        const res = await fetch(`/api/products/${params.id}`)
+        const res = await fetch(`/api/products/${id}`)
         if (res.status === 404) {
           if (!active) return
           setError('Product not found')
@@ -79,7 +80,7 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
     return () => {
       active = false
     }
-  }, [params.id, router])
+  }, [id, router])
 
   if (loading) {
     return (
