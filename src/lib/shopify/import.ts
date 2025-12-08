@@ -188,8 +188,13 @@ async function importProduct(
  */
 export async function importAllProducts(
   supabase: SupabaseClient,
-  onProgress?: (progress: ImportProgress) => void
+  options?: {
+    onProgress?: (progress: ImportProgress, lastError?: string | null) => void
+    logId?: string
+    progressEvery?: number
+  }
 ): Promise<ImportResult> {
+  const { onProgress, logId, progressEvery = 10 } = options || {}
   const shopify = getShopifyClient()
   
   // Get total count
@@ -203,7 +208,10 @@ export async function importAllProducts(
     errors: [],
   }
 
-  onProgress?.(progress)
+  onProgress?.(progress, null)
+  if (logId) {
+    await updateSyncLog(supabase, logId, 'running', progress, null)
+  }
 
   // Paginate through all products
   const pageGenerator = shopify.paginate<GetProductsResponse, ShopifyProduct>(
@@ -214,11 +222,14 @@ export async function importAllProducts(
     { pageSize: 50 }
   )
 
+  let processedSinceLastReport = 0
+
   for await (const products of pageGenerator) {
     for (const product of products) {
       try {
         await importProduct(supabase, product)
         progress.imported++
+        processedSinceLastReport++
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error)
         progress.errors.push({
@@ -226,23 +237,44 @@ export async function importAllProducts(
           error: errorMessage,
         })
         console.error(`Error importing ${product.title}:`, errorMessage)
+        processedSinceLastReport++
+        onProgress?.(progress, errorMessage)
+        if (logId) {
+          await updateSyncLog(supabase, logId, 'running', progress, errorMessage)
+        }
       }
     }
 
-    onProgress?.(progress)
+    if (processedSinceLastReport >= progressEvery) {
+      onProgress?.(progress, null)
+      if (logId) {
+        await updateSyncLog(supabase, logId, 'running', progress, null)
+      }
+      processedSinceLastReport = 0
+    }
   }
 
-  // Log sync
-  await supabase.from('sync_logs').insert({
-    sync_type: 'import_from_shopify',
-    entity_type: 'product',
-    status: progress.errors.length === 0 ? 'success' : 'partial',
-    details: {
-      total: progress.total,
-      imported: progress.imported,
-      errors: progress.errors.length,
-    },
-  })
+  if (logId) {
+    await updateSyncLog(
+      supabase,
+      logId,
+      progress.errors.length === 0 ? 'success' : 'partial',
+      progress,
+      null
+    )
+  } else {
+    // Log sync (legacy)
+    await supabase.from('sync_logs').insert({
+      sync_type: 'import_from_shopify',
+      entity_type: 'product',
+      status: progress.errors.length === 0 ? 'success' : 'partial',
+      details: {
+        total: progress.total,
+        imported: progress.imported,
+        errors: progress.errors.length,
+      },
+    })
+  }
 
   return {
     success: progress.errors.length === 0,
@@ -326,5 +358,28 @@ function guessMime(filename: string): string | null {
   if (lower.endsWith('.gif')) return 'image/gif'
   if (lower.endsWith('.avif')) return 'image/avif'
   return null
+}
+
+async function updateSyncLog(
+  supabase: SupabaseClient,
+  logId: string,
+  status: string,
+  progress: ImportProgress,
+  lastError: string | null
+) {
+  await supabase
+    .from('sync_logs')
+    .update({
+      status,
+      details: {
+        total: progress.total,
+        imported: progress.imported,
+        skipped: progress.skipped,
+        errors: progress.errors.length,
+        lastError,
+      },
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', logId)
 }
 

@@ -26,8 +26,30 @@ export async function POST() {
       )
     }
 
-    // Run import
-    const result = await importAllProducts(supabase)
+    // create running log
+    const { data: logRow, error: logError } = await supabase
+      .from('sync_logs')
+      .insert({
+        sync_type: 'import_from_shopify',
+        entity_type: 'product',
+        status: 'running',
+        details: { total: null, imported: 0, errors: 0 },
+        performed_by: null,
+      })
+      .select('id')
+      .single()
+
+    if (logError || !logRow?.id) {
+      return NextResponse.json({ error: 'Failed to start import log' }, { status: 500 })
+    }
+
+    const logId = logRow.id
+
+    // Run import with progress logging
+    const result = await importAllProducts(supabase, {
+      logId,
+      progressEvery: 10,
+    })
 
     return NextResponse.json(result)
   } catch (error) {
@@ -52,14 +74,23 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get last sync log
-    const { data: lastSync } = await supabase
+    const { data: runningLog } = await supabase
       .from('sync_logs')
       .select('*')
       .eq('sync_type', 'import_from_shopify')
+      .eq('status', 'running')
       .order('created_at', { ascending: false })
       .limit(1)
-      .single()
+      .maybeSingle()
+
+    const { data: lastLog } = await supabase
+      .from('sync_logs')
+      .select('*')
+      .eq('sync_type', 'import_from_shopify')
+      .in('status', ['success', 'partial', 'failed'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
 
     // Get product count
     const { count: productCount } = await supabase
@@ -79,7 +110,21 @@ export async function GET() {
       .maybeSingle()
 
     return NextResponse.json({
-      lastSync,
+      running: runningLog
+        ? {
+            status: runningLog.status,
+            startedAt: runningLog.created_at,
+            updatedAt: runningLog.updated_at,
+            ...(runningLog.details || {}),
+          }
+        : null,
+      lastCompleted: lastLog
+        ? {
+            status: lastLog.status,
+            finishedAt: lastLog.created_at,
+            ...(lastLog.details || {}),
+          }
+        : null,
       productCount,
       unassociatedMedia: {
         count: mediaCount ?? 0,

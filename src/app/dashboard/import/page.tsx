@@ -3,16 +3,28 @@
 import { useState, useEffect } from 'react'
 
 interface ImportStatus {
-  lastSync: {
-    created_at: string
+  running: {
     status: string
-    details: {
-      total: number
-      imported: number
-      errors: number
-    }
+    startedAt: string
+    updatedAt: string | null
+    total?: number
+    imported?: number
+    skipped?: number
+    errors?: number
+    lastError?: string | null
+  } | null
+  lastCompleted: {
+    status: string
+    finishedAt: string
+    total?: number
+    imported?: number
+    errors?: number
   } | null
   productCount: number
+  unassociatedMedia?: {
+    count: number
+    lastUpdated: string | null
+  }
 }
 
 interface ImportResult {
@@ -34,6 +46,8 @@ export default function ImportPage() {
 
   useEffect(() => {
     fetchStatus()
+    const interval = setInterval(fetchStatus, 4000)
+    return () => clearInterval(interval)
   }, [])
 
   async function fetchStatus() {
@@ -112,24 +126,71 @@ export default function ImportPage() {
             <div className="bg-slate-700/30 rounded-lg p-4">
               <p className="text-slate-400 text-sm">Last Sync</p>
               <p className="text-lg font-medium text-white mt-1">
-                {status?.lastSync
-                  ? new Date(status.lastSync.created_at).toLocaleDateString()
+                {status?.lastCompleted
+                  ? new Date(status.lastCompleted.finishedAt).toLocaleString()
                   : 'Never'}
               </p>
             </div>
             <div className="bg-slate-700/30 rounded-lg p-4">
-              <p className="text-slate-400 text-sm">Last Status</p>
-              <p className={`text-lg font-medium mt-1 ${
-                status?.lastSync?.status === 'success' 
-                  ? 'text-green-400' 
-                  : status?.lastSync?.status === 'partial'
-                    ? 'text-yellow-400'
-                    : 'text-slate-400'
-              }`}>
-                {status?.lastSync?.status ?? '—'}
+              <p className="text-slate-400 text-sm">Status</p>
+              <p
+                className={`text-lg font-medium mt-1 ${
+                  status?.running
+                    ? 'text-amber-400'
+                    : status?.lastCompleted?.status === 'success'
+                      ? 'text-green-400'
+                      : status?.lastCompleted?.status === 'partial'
+                        ? 'text-yellow-400'
+                        : status?.lastCompleted?.status === 'failed'
+                          ? 'text-red-400'
+                          : 'text-slate-400'
+                }`}
+              >
+                {status?.running
+                  ? 'Running'
+                  : status?.lastCompleted?.status ?? '—'}
               </p>
             </div>
           </div>
+
+          {/* Running Progress */}
+          {status?.running && (
+            <div className="border border-amber-500/30 bg-amber-500/5 rounded-lg p-4 space-y-2">
+              <div className="flex items-center justify-between text-sm text-amber-200">
+                <span>Import in progress</span>
+                <span>
+                  Started {new Date(status.running.startedAt).toLocaleTimeString()}
+                </span>
+              </div>
+              <div className="w-full h-2 rounded-full bg-slate-700 overflow-hidden">
+                <div
+                  className="h-2 bg-amber-400"
+                  style={{
+                    width:
+                      status.running.total && status.running.imported !== undefined
+                        ? `${Math.min(
+                            100,
+                            Math.round(
+                              (status.running.imported / Math.max(status.running.total, 1)) * 100
+                            )
+                          )}%`
+                        : '25%',
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-xs text-amber-100">
+                <span>
+                  Imported {status.running.imported ?? 0} / {status.running.total ?? '…'}
+                </span>
+                <span>Errors: {status.running.errors ?? 0}</span>
+              </div>
+              {status.running.lastError ? (
+                <div className="text-xs text-amber-200">
+                  Last error: {status.running.lastError}
+                </div>
+              ) : null}
+            </div>
+          )}
 
           {/* Error Message */}
           {error && (
