@@ -51,6 +51,8 @@ interface UnassociatedMedia {
   width: number | null
   height: number | null
   position: number | null
+  shopify_variant_id?: number | null
+  is_variant_hero?: boolean
   shopify_created_at: string | null
   shopify_updated_at: string | null
 }
@@ -249,8 +251,12 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                 <div className="p-4 space-y-2">
                   <div className="flex items-center justify-between text-xs text-slate-400">
                     <span>Position: {media.position ?? '—'}</span>
-                    <span className="px-2 py-1 rounded-full bg-amber-500/15 text-amber-300 font-semibold">
-                      Unassociated
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                      media.is_variant_hero
+                        ? 'bg-blue-500/20 text-blue-200'
+                        : 'bg-amber-500/15 text-amber-300'
+                    }`}>
+                      {media.is_variant_hero ? 'Variant Hero' : 'Unassociated'}
                     </span>
                   </div>
                   <p className="text-sm text-white truncate">{media.filename || media.shopify_media_id}</p>

@@ -57,7 +57,7 @@ export async function GET(
       const { data: stagedMedia, error: mediaError } = await supabase
         .from('product_images_unassociated')
         .select(
-          'id, shopify_media_id, source_url, filename, alt_text, mime_type, width, height, position, shopify_created_at, shopify_updated_at'
+          'id, shopify_media_id, source_url, filename, alt_text, mime_type, width, height, position, shopify_created_at, shopify_updated_at, shopify_variant_id, is_variant_hero'
         )
         .or(
           `product_id.eq.${product.id},shopify_product_id.eq.${product.shopify_product_id ?? 'null'}`

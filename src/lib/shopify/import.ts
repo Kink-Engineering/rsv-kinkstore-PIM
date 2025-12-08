@@ -131,6 +131,7 @@ async function importProduct(
   const productId = productData.id
 
   await upsertShopifyMedia(supabase, product, productId, shopifyProductId)
+  await upsertVariantHeroMedia(supabase, product, productId)
 
   // Upsert variants
   for (const { node: variant } of product.variants.edges) {
@@ -359,6 +360,57 @@ function guessMime(filename: string): string | null {
   if (lower.endsWith('.gif')) return 'image/gif'
   if (lower.endsWith('.avif')) return 'image/avif'
   return null
+}
+
+/**
+ * Upsert variant featured media (hero) into staging table
+ */
+async function upsertVariantHeroMedia(
+  supabase: SupabaseClient,
+  product: ShopifyProduct,
+  productId: string
+) {
+  const variants = product.variants?.edges || []
+  const now = new Date().toISOString()
+
+  for (const { node: variant } of variants) {
+    if (!variant.featuredMedia) continue
+    const media = variant.featuredMedia
+    const url = media.image?.url
+    if (!url) continue
+
+    const filename = extractFilename(url)
+    const mime = guessMime(filename)
+
+    const { error } = await supabase
+      .from('product_images_unassociated')
+      .upsert(
+        {
+          shopify_media_id: media.id,
+          shopify_product_id: extractShopifyId(product.id),
+          shopify_variant_id: extractShopifyId(variant.id),
+          product_id: productId,
+          variant_id: null, // we are not linking to local variant UUIDs yet
+          source_url: url,
+          filename,
+          alt_text: media.alt ?? null,
+          mime_type: mime,
+          byte_size: null,
+          width: media.image?.width ?? null,
+          height: media.image?.height ?? null,
+          position: 1,
+          is_variant_hero: true,
+          shopify_created_at: null,
+          shopify_updated_at: null,
+          updated_at: now,
+        },
+        { onConflict: 'shopify_media_id' }
+      )
+
+    if (error) {
+      console.error(`Failed to upsert variant hero media ${media.id}:`, error.message)
+    }
+  }
 }
 
 async function updateSyncLog(

@@ -40,6 +40,15 @@ export const PRODUCT_FRAGMENT = `
             name
             value
           }
+          featuredMedia {
+            id
+            alt
+            image {
+              url
+              width
+              height
+            }
+          }
           inventoryItem {
             measurement {
               weight {
@@ -171,6 +180,15 @@ export interface ShopifyVariant {
       }
     }
   }
+  featuredMedia?: {
+    id: string
+    alt?: string | null
+    image?: {
+      url?: string | null
+      width?: number | null
+      height?: number | null
+    } | null
+  } | null
 }
 
 export interface GetProductsResponse {
