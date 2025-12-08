@@ -97,6 +97,7 @@ erDiagram
         varchar association_type "NOT NULL: product_image, product_video, variant_hero"
         int position "Gallery order (1 = hero)"
         boolean is_published "Default: true"
+        varchar shopify_media_id "Shopify MediaImage GID - NULL until synced"
         constraint uk_product_media UK "UNIQUE(product_id, media_asset_id, association_type)"
         constraint uk_variant_hero UK "UNIQUE(variant_id) WHERE variant_hero"
     }
@@ -189,6 +190,10 @@ The following **product-level metafields** are used in Shopify and stored in `pr
   - Which image is the hero (position = 1 for product-level)
   - Which videos are associated with a product
   - Variant-specific hero images (when `variant_id` is set)
+- **`shopify_media_id`**: Stores the Shopify MediaImage GID (e.g., `gid://shopify/MediaImage/...`) after syncing to Shopify. NULL until first sync. Used for:
+  - Tracking which images have been synced
+  - Updating/removing specific images in Shopify
+  - Detecting drift between PIM and Shopify
 - **UI Behavior**: Images from the SKU bucket matching the product are highlighted/suggested for publication, but users can choose any image from any bucket.
 - **Future flexibility**: Buckets may exist without products (example unique label "LEATHER SHOTS"); publishing points may later expand beyond products
 
