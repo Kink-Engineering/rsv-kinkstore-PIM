@@ -1,5 +1,6 @@
 import { createUntypedClient } from '@/lib/supabase/server-untyped'
 import { NextRequest, NextResponse } from 'next/server'
+import { buildCreatePayload } from './validate'
 
 export async function GET(request: NextRequest) {
   try {
@@ -59,6 +60,62 @@ export async function GET(request: NextRequest) {
     console.error('Products API error:', error)
     return NextResponse.json(
       { error: 'Failed to fetch products' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = await createUntypedClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const result = buildCreatePayload(body)
+    if ('error' in result) {
+      return NextResponse.json({ error: result.error }, { status: 400 })
+    }
+    const payload = result.payload
+
+    const { data, error } = await supabase
+      .from('products')
+      .insert(payload)
+      .select(
+        `
+        id,
+        title,
+        handle,
+        sku_label,
+        vendor,
+        product_type,
+        status,
+        shopify_status,
+        tags,
+        description,
+        description_html,
+        shopify_product_id,
+        shopify_published_at,
+        created_at,
+        updated_at,
+        last_synced_at
+      `
+      )
+      .single()
+
+    if (error) {
+      console.error('Product create error:', error)
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+
+    return NextResponse.json({ product: data }, { status: 201 })
+  } catch (error) {
+    console.error('Product create API error:', error)
+    return NextResponse.json(
+      { error: 'Failed to create product' },
       { status: 500 }
     )
   }

@@ -1,5 +1,6 @@
 import { createUntypedClient } from '@/lib/supabase/server-untyped'
 import { NextRequest, NextResponse } from 'next/server'
+import { buildUpdatePayload } from '../validate'
 
 export async function GET(
   _request: NextRequest,
@@ -84,6 +85,117 @@ export async function GET(
     console.error('Product detail API error:', error)
     return NextResponse.json(
       { error: 'Failed to fetch product' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await context.params
+    const supabase = await createUntypedClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const result = buildUpdatePayload(body)
+    if ('error' in result) {
+      return NextResponse.json({ error: result.error }, { status: 400 })
+    }
+
+    const { data, error } = await supabase
+      .from('products')
+      .update(result.payload)
+      .eq('id', id)
+      .select(
+        `
+        id,
+        title,
+        handle,
+        sku_label,
+        vendor,
+        product_type,
+        status,
+        shopify_status,
+        tags,
+        description,
+        description_html,
+        shopify_product_id,
+        shopify_published_at,
+        created_at,
+        updated_at,
+        last_synced_at,
+        variants:product_variants(
+          id,
+          title,
+          sku,
+          price,
+          compare_at_price,
+          weight,
+          weight_unit,
+          inventory_quantity,
+          position,
+          option1,
+          option2,
+          option3,
+          shopify_variant_id
+        )
+      `
+      )
+      .single()
+
+    if (error) {
+      console.error('Product update error:', error)
+      if (error.code === 'PGRST116') {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      }
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+
+    return NextResponse.json({ product: data })
+  } catch (error) {
+    console.error('Product update API error:', error)
+    return NextResponse.json(
+      { error: 'Failed to update product' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(
+  _request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await context.params
+    const supabase = await createUntypedClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      console.error('Product delete error:', error)
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Product delete API error:', error)
+    return NextResponse.json(
+      { error: 'Failed to delete product' },
       { status: 500 }
     )
   }

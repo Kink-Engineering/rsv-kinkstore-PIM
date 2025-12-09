@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 interface Product {
   id: string
@@ -25,10 +26,13 @@ interface ProductsResponse {
 }
 
 export default function ProductsPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const initialPage = Number(searchParams.get('page') || '1') || 1
   const [data, setData] = useState<ProductsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
+  const [page, setPage] = useState(initialPage)
   const pageSize = 20
 
   useEffect(() => {
@@ -55,7 +59,27 @@ export default function ProductsPage() {
     }
   }
 
+  useEffect(() => {
+    const paramPage = Number(searchParams.get('page') || '1') || 1
+    if (paramPage !== page) {
+      setPage(paramPage)
+    }
+  }, [searchParams, page])
+
   const totalPages = data ? Math.ceil(data.total / pageSize) : 0
+
+  function setPageAndPersist(nextPage: number) {
+    const safePage = Math.min(Math.max(1, nextPage), Math.max(1, totalPages || 1))
+    setPage(safePage)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('page', safePage.toString())
+    router.replace(`?${params.toString()}`)
+  }
+
+  function handleSearchChange(value: string) {
+    setSearch(value)
+    setPageAndPersist(1)
+  }
 
   return (
     <div className="space-y-6">
@@ -76,10 +100,7 @@ export default function ProductsPage() {
             type="text"
             placeholder="Search products..."
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value)
-              setPage(1)
-            }}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
           />
         </div>
@@ -91,7 +112,7 @@ export default function ProductsPage() {
           <thead>
             <tr className="border-b border-slate-700/50">
               <th className="px-6 py-4 text-left text-sm font-medium text-slate-400">Product</th>
-              <th className="px-6 py-4 text-left text-sm font-medium text-slate-400">SKU</th>
+              <th className="px-6 py-4 text-left text-sm font-medium text-slate-400">SKU Label</th>
               <th className="px-6 py-4 text-left text-sm font-medium text-slate-400">Vendor</th>
               <th className="px-6 py-4 text-left text-sm font-medium text-slate-400">Type</th>
               <th className="px-6 py-4 text-left text-sm font-medium text-slate-400">Variants</th>
@@ -171,17 +192,36 @@ export default function ProductsPage() {
           </p>
           <div className="flex gap-2">
             <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
+              onClick={() => setPageAndPersist(page - 1)}
               disabled={page === 1}
               className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
             >
               Previous
             </button>
-            <span className="px-4 py-2 text-slate-400">
-              Page {page} of {totalPages}
-            </span>
+            <div className="flex items-center gap-1">
+              {(() => {
+                const windowSize = 10
+                const start = Math.max(1, Math.min(page - 4, (totalPages - windowSize + 1)))
+                const end = Math.min(totalPages, start + windowSize - 1)
+                const pages = []
+                for (let p = start; p <= end; p++) pages.push(p)
+                return pages.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPageAndPersist(p)}
+                    className={`px-3 py-2 rounded-lg text-sm ${
+                      p === page
+                        ? 'bg-amber-500 text-black font-semibold'
+                        : 'bg-slate-700 text-white hover:bg-slate-600'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))
+              })()}
+            </div>
             <button
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              onClick={() => setPageAndPersist(page + 1)}
               disabled={page === totalPages}
               className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
             >
