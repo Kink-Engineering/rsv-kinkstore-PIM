@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { promises as fs } from 'fs'
 import path from 'path'
 
-const LOG_PATH = path.join(process.cwd(), 'logs', 'next-dev.log')
+const LOG_PATH = path.join(process.cwd(), 'logs', 'app.log')
 const DEFAULT_LINES = 400
 
 export async function GET(request: Request) {
@@ -28,10 +28,13 @@ export async function GET(request: Request) {
     })
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return NextResponse.json(
-        { error: 'Log file not found', path: LOG_PATH },
-        { status: 404 }
-      )
+      return new NextResponse('No log file yet.', {
+        status: 200,
+        headers: {
+          'content-type': 'text/plain; charset=utf-8',
+          'cache-control': 'no-store',
+        },
+      })
     }
     return NextResponse.json(
       { error: 'Failed to read log file' },

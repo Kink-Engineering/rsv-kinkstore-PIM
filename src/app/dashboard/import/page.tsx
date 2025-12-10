@@ -86,6 +86,8 @@ export default function ImportPage() {
   const [driveFolderId, setDriveFolderId] = useState('')
   const [driveLoading, setDriveLoading] = useState(false)
   const [driveError, setDriveError] = useState<string | null>(null)
+  const [importingFolderId, setImportingFolderId] = useState<string | null>(null)
+  const [importMessage, setImportMessage] = useState<string | null>(null)
   const [storjObjects, setStorjObjects] = useState<StorjObject[]>([])
   const [storjBucket, setStorjBucket] = useState('')
   const [storjPrefix, setStorjPrefix] = useState('products/')
@@ -202,6 +204,43 @@ export default function ImportPage() {
       setDriveFiles([])
     } finally {
       setDriveLoading(false)
+    }
+  }
+
+  async function importDriveFolder(folderId?: string, folderName?: string) {
+    const targetId =
+      folderId ||
+      driveFiles.find((f) => f.mimeType === 'application/vnd.google-apps.folder')?.id
+    const label = folderName || driveFiles.find((f) => f.id === targetId)?.name
+
+    if (!targetId) {
+      setImportMessage('No folder to import. Load Drive folders first.')
+      return
+    }
+
+    setImportingFolderId(targetId)
+    setImportMessage(null)
+    try {
+      const res = await fetch('/api/gdrive/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderId: targetId }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setImportMessage(data.error || 'Import failed')
+        return
+      }
+      setImportMessage(
+        `Imported ${label || targetId}: ${data.uploaded}/${data.total} files (assets created: ${
+          data.assetsCreated ?? data.uploaded
+        }, skipped (no product): ${data.skippedNoProduct ?? 0}, failed: ${data.failed ?? 0})`,
+      )
+      fetchStorjObjects()
+    } catch (err) {
+      setImportMessage(err instanceof Error ? err.message : 'Import failed')
+    } finally {
+      setImportingFolderId(null)
     }
   }
 
@@ -399,33 +438,6 @@ export default function ImportPage() {
             )}
           </button>
 
-          <p className="text-slate-500 text-sm text-center">
-            This will import all products from Shopify. Existing products will be updated.
-          </p>
-
-          {/* Dev Log Viewer */}
-          <div className="mt-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-slate-400">Dev log (tail of logs/next-dev.log)</p>
-              <button
-                onClick={fetchLogs}
-                className="text-xs px-3 py-1 rounded-md bg-slate-700 text-slate-200 hover:bg-slate-600 transition"
-              >
-                Refresh
-              </button>
-            </div>
-            <div
-              ref={logRef}
-              className="bg-slate-900/60 border border-slate-700/70 rounded-lg p-3 text-xs text-slate-200 font-mono h-56 overflow-y-auto whitespace-pre-wrap"
-            >
-              {logError
-                ? `⚠️ ${logError}`
-                : logText
-                  ? logText
-                  : 'No log output yet.'}
-            </div>
-          </div>
-
           {/* Recent Errors */}
           <div className="mt-4 space-y-2">
             <div className="flex items-center justify-between">
@@ -491,6 +503,29 @@ export default function ImportPage() {
         </div>
 
         <div className="p-6 space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="text-sm text-slate-300">
+              Import one Drive folder at a time to verify the pipeline.
+            </div>
+            <button
+              onClick={() => importDriveFolder()}
+              disabled={driveLoading || importingFolderId !== null || driveFiles.length === 0}
+              className="py-2 px-4 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {importingFolderId ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Importing...
+                </>
+              ) : (
+                <>
+                  <span>▶️</span>
+                  Import next folder
+                </>
+              )}
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-2">
               <label className="text-sm text-slate-300">Folder ID (optional)</label>
@@ -528,6 +563,12 @@ export default function ImportPage() {
             </div>
           )}
 
+          {importMessage && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-sm text-amber-200">
+              {importMessage}
+            </div>
+          )}
+
           <div className="bg-slate-900/60 border border-slate-700/70 rounded-lg overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
               <div className="text-slate-200 text-sm">
@@ -545,13 +586,24 @@ export default function ImportPage() {
             </div>
             <div className="divide-y divide-slate-800 max-h-96 overflow-y-auto text-sm text-slate-200">
               {driveFiles.map((file) => (
-                <div key={file.id} className="px-4 py-2 flex items-center justify-between">
+                <div key={file.id} className="px-4 py-2 flex items-center justify-between gap-3">
                   <div className="truncate">
                     <span className="font-medium">{file.name}</span>
                     <span className="text-[11px] text-slate-500 ml-2">{file.mimeType}</span>
                   </div>
-                  <div className="text-[11px] text-slate-500 ml-4 whitespace-nowrap">
-                    {file.modifiedTime ? new Date(file.modifiedTime).toLocaleDateString() : ''}
+                  <div className="flex items-center gap-3">
+                    <div className="text-[11px] text-slate-500 whitespace-nowrap">
+                      {file.modifiedTime ? new Date(file.modifiedTime).toLocaleDateString() : ''}
+                    </div>
+                    {file.mimeType === 'application/vnd.google-apps.folder' && (
+                      <button
+                        onClick={() => importDriveFolder(file.id, file.name)}
+                        disabled={importingFolderId !== null}
+                        className="text-[11px] px-2 py-1 rounded bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 disabled:opacity-50"
+                      >
+                        Import this folder
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

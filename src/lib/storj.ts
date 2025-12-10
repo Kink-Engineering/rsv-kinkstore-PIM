@@ -1,4 +1,4 @@
-import { ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3'
+import { ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 
 type StorjObject = {
   key: string
@@ -55,5 +55,17 @@ export async function listStorjPrefix(bucket: string, prefix: string) {
   const commonPrefixes = (res.CommonPrefixes || []).map((cp) => cp.Prefix || '')
 
   return { objects, commonPrefixes, isTruncated: !!res.IsTruncated, nextContinuationToken: res.NextContinuationToken }
+}
+
+export async function uploadObject(bucket: string, key: string, body: Buffer, contentType?: string) {
+  const client = getClient()
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    }),
+  )
 }
 

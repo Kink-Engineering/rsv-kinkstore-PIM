@@ -53,3 +53,74 @@ export async function listFilesInFolder(folderId: string) {
   return res.data.files ?? []
 }
 
+export async function getFileMetadata(fileId: string) {
+  const drive = await getDriveClient()
+  const res = await drive.files.get({
+    fileId,
+    fields: 'id,name,mimeType,parents',
+    supportsAllDrives: true,
+  })
+  return res.data
+}
+
+export type DriveFileWithPath = {
+  id: string
+  name: string
+  mimeType: string
+  path: string
+}
+
+export async function listFolderTree(rootFolderId: string): Promise<DriveFileWithPath[]> {
+  const drive = await getDriveClient()
+  const rootMeta = await drive.files.get({
+    fileId: rootFolderId,
+    fields: 'id,name',
+    supportsAllDrives: true,
+  })
+
+  const rootName = rootMeta.data.name || rootFolderId
+  const queue: Array<{ id: string; path: string }> = [{ id: rootFolderId, path: rootName }]
+  const files: DriveFileWithPath[] = []
+
+  while (queue.length) {
+    const current = queue.shift()!
+    const res = await drive.files.list({
+      q: `'${current.id}' in parents and trashed = false`,
+      fields: 'files(id,name,mimeType)',
+      pageSize: 1000,
+      includeItemsFromAllDrives: true,
+      supportsAllDrives: true,
+    })
+
+    for (const f of res.data.files || []) {
+      if (!f.id || !f.name || !f.mimeType) continue
+      const nextPath = `${current.path}/${f.name}`
+      if (f.mimeType === 'application/vnd.google-apps.folder') {
+        queue.push({ id: f.id, path: nextPath })
+      } else {
+        files.push({
+          id: f.id,
+          name: f.name,
+          mimeType: f.mimeType,
+          path: nextPath,
+        })
+      }
+    }
+  }
+
+  return files
+}
+
+export async function downloadDriveFile(fileId: string) {
+  const drive = await getDriveClient()
+  const res = await drive.files.get(
+    {
+      fileId,
+      alt: 'media',
+      supportsAllDrives: true,
+    },
+    { responseType: 'arraybuffer' },
+  )
+  return Buffer.from(res.data as ArrayBuffer)
+}
+
