@@ -1,4 +1,4 @@
-import { listFilesInFolder } from '@/lib/googleDrive'
+import { getFileMetadata, listFilesInFolder } from '@/lib/googleDrive'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
@@ -14,10 +14,20 @@ export async function GET(request: Request) {
       )
     }
 
+    // Resolve folder name for UI breadcrumbing; fall back to ID if not found
+    let folderName: string | null = null
+    try {
+      const meta = await getFileMetadata(folderId)
+      folderName = meta?.name ?? null
+    } catch (err) {
+      console.warn('Failed to fetch folder metadata for breadcrumbing:', err)
+    }
+
     const files = await listFilesInFolder(folderId)
 
     return NextResponse.json({
       folderId,
+      folderName,
       count: files.length,
       files,
     })

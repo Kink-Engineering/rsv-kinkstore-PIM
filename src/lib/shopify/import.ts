@@ -172,24 +172,6 @@ async function importProduct(
     }
   }
 
-  // Create media bucket if it doesn't exist
-  if (skuLabel) {
-    const { error: bucketError } = await supabase
-      .from('media_buckets')
-      .upsert({
-        product_id: productId,
-        sku_label: skuLabel,
-        storj_path: `products/${skuLabel}/`,
-        bucket_status: 'active',
-      }, {
-        onConflict: 'product_id',
-        ignoreDuplicates: true,
-      })
-
-    if (bucketError && !bucketError.message.includes('duplicate')) {
-      console.error(`Failed to create media bucket:`, bucketError.message)
-    }
-  }
 }
 
 /**

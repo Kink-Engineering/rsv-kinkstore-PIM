@@ -84,6 +84,8 @@ export default function ImportPage() {
   }>({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
   const [driveFiles, setDriveFiles] = useState<DriveFile[]>([])
   const [driveFolderId, setDriveFolderId] = useState('')
+  const [driveBreadcrumb, setDriveBreadcrumb] = useState<Array<{ id: string; name: string }>>([])
+  const [driveRoot, setDriveRoot] = useState<{ id: string; name: string } | null>(null)
   const [driveLoading, setDriveLoading] = useState(false)
   const [driveError, setDriveError] = useState<string | null>(null)
   const [importingFolderId, setImportingFolderId] = useState<string | null>(null)
@@ -177,12 +179,18 @@ export default function ImportPage() {
     }
   }
 
-  async function fetchDriveFiles(folderOverride?: string) {
+  async function fetchDriveFiles(
+    options?: {
+      folderId?: string
+      folderName?: string
+      replaceTrail?: boolean
+    },
+  ) {
     setDriveLoading(true)
     setDriveError(null)
     try {
       const params = new URLSearchParams()
-      const folderIdToUse = (folderOverride ?? driveFolderId).trim()
+      const folderIdToUse = (options?.folderId ?? driveFolderId).trim()
       if (folderIdToUse) {
         params.set('folderId', folderIdToUse)
       }
@@ -196,8 +204,28 @@ export default function ImportPage() {
         return
       }
       setDriveFiles(data.files || [])
-      if (!driveFolderId && data.folderId) {
-        setDriveFolderId(data.folderId)
+
+      // Resolve folder name for breadcrumbing; prefer provided name, then API name, then ID
+      const resolvedFolderId: string = data.folderId || folderIdToUse
+      const resolvedFolderName: string =
+        options?.folderName || data.folderName || resolvedFolderId || 'Folder'
+
+      if (resolvedFolderId) {
+        setDriveFolderId(resolvedFolderId)
+        if (options?.replaceTrail || driveBreadcrumb.length === 0) {
+          setDriveRoot({ id: resolvedFolderId, name: resolvedFolderName })
+        }
+        setDriveBreadcrumb((trail) => {
+          if (options?.replaceTrail || trail.length === 0) {
+            return [{ id: resolvedFolderId, name: resolvedFolderName }]
+          }
+
+          const existingIdx = trail.findIndex((t) => t.id === resolvedFolderId)
+          if (existingIdx >= 0) {
+            return trail.slice(0, existingIdx + 1)
+          }
+          return [...trail, { id: resolvedFolderId, name: resolvedFolderName }]
+        })
       }
     } catch (err) {
       setDriveError(err instanceof Error ? err.message : 'Failed to load Drive files')
@@ -284,7 +312,7 @@ export default function ImportPage() {
 
   useEffect(() => {
     // Initial fetch using backend default folder if available
-    fetchDriveFiles()
+    fetchDriveFiles({ replaceTrail: true })
     fetchStorjObjects()
   }, [])
 
@@ -538,7 +566,7 @@ export default function ImportPage() {
             </div>
             <div className="flex items-end">
               <button
-                onClick={() => fetchDriveFiles()}
+                onClick={() => fetchDriveFiles({ folderId: driveFolderId, replaceTrail: true })}
                 disabled={driveLoading}
                 className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
@@ -569,6 +597,60 @@ export default function ImportPage() {
             </div>
           )}
 
+          {/* Breadcrumbs */}
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
+            <button
+              className={`px-2 py-1 rounded ${
+                !driveRoot || driveBreadcrumb.length === 0
+                  ? 'bg-slate-700 text-white'
+                  : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
+              }`}
+              onClick={() =>
+                driveRoot &&
+                driveBreadcrumb.length > 0 &&
+                fetchDriveFiles({
+                  folderId: driveRoot.id,
+                  folderName: driveRoot.name,
+                })
+              }
+              disabled={driveLoading || !driveRoot || driveBreadcrumb.length === 0}
+            >
+              {driveRoot?.name || 'SKUs'}
+            </button>
+            {driveBreadcrumb.length > 0 &&
+              driveBreadcrumb
+                .filter((crumb) => !driveRoot || crumb.id !== driveRoot.id)
+                .map((crumb, idx, arr) => {
+                  const isLast = idx === arr.length - 1
+                  return (
+                    <div key={crumb.id} className="flex items-center gap-2">
+                      <span className="text-slate-500">/</span>
+                      {isLast ? (
+                        <span className="px-2 py-1 rounded bg-slate-700 text-white">
+                          {crumb.name}
+                        </span>
+                      ) : (
+                        <button
+                          className="px-2 py-1 rounded bg-slate-800 text-slate-200 hover:bg-slate-700"
+                          onClick={() =>
+                            fetchDriveFiles({
+                              folderId: crumb.id,
+                              folderName: crumb.name,
+                            })
+                          }
+                          disabled={driveLoading}
+                        >
+                          {crumb.name}
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+            {driveBreadcrumb.length === 0 && (
+              <span className="text-slate-500">No folder loaded yet</span>
+            )}
+          </div>
+
           <div className="bg-slate-900/60 border border-slate-700/70 rounded-lg overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
               <div className="text-slate-200 text-sm">
@@ -587,8 +669,20 @@ export default function ImportPage() {
             <div className="divide-y divide-slate-800 max-h-96 overflow-y-auto text-sm text-slate-200">
               {driveFiles.map((file) => (
                 <div key={file.id} className="px-4 py-2 flex items-center justify-between gap-3">
-                  <div className="truncate">
-                    <span className="font-medium">{file.name}</span>
+                  <div className="truncate flex items-center gap-2">
+                    {file.mimeType === 'application/vnd.google-apps.folder' ? (
+                      <button
+                        className="text-left font-medium text-blue-300 hover:text-blue-200"
+                        onClick={() =>
+                          fetchDriveFiles({ folderId: file.id, folderName: file.name })
+                        }
+                        disabled={driveLoading}
+                      >
+                        {file.name}
+                      </button>
+                    ) : (
+                      <span className="font-medium">{file.name}</span>
+                    )}
                     <span className="text-[11px] text-slate-500 ml-2">{file.mimeType}</span>
                   </div>
                   <div className="flex items-center gap-3">
@@ -596,13 +690,24 @@ export default function ImportPage() {
                       {file.modifiedTime ? new Date(file.modifiedTime).toLocaleDateString() : ''}
                     </div>
                     {file.mimeType === 'application/vnd.google-apps.folder' && (
-                      <button
-                        onClick={() => importDriveFolder(file.id, file.name)}
-                        disabled={importingFolderId !== null}
-                        className="text-[11px] px-2 py-1 rounded bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 disabled:opacity-50"
-                      >
-                        Import this folder
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() =>
+                            fetchDriveFiles({ folderId: file.id, folderName: file.name })
+                          }
+                          disabled={driveLoading}
+                          className="text-[11px] px-2 py-1 rounded bg-blue-500/20 text-blue-200 hover:bg-blue-500/30 disabled:opacity-50"
+                        >
+                          Open
+                        </button>
+                        <button
+                          onClick={() => importDriveFolder(file.id, file.name)}
+                          disabled={importingFolderId !== null}
+                          className="text-[11px] px-2 py-1 rounded bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 disabled:opacity-50"
+                        >
+                          Import this folder
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>

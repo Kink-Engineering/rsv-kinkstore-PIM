@@ -64,31 +64,27 @@ export async function POST(request: Request) {
         // Lookup/create media bucket for sku_label
         let bucketInfo = bucketCache.get(skuLabel)
         if (!bucketInfo) {
+          const storjPath = [basePath, `products/${skuLabel}/`].filter(Boolean).join('')
+
+          // Product lookup is optional; bucket can exist without a product
           const { data: product } = await supabase
             .from('products')
             .select('id, sku_label')
             .eq('sku_label', skuLabel)
             .single()
 
-          if (!product?.id) {
-            results.skippedNoProduct += 1
-            continue
-          }
-
-          const storjPath = [basePath, `products/${skuLabel}/`].filter(Boolean).join('')
-
           const { data: mb, error: bucketErr } = await supabase
             .from('media_buckets')
             .upsert(
               {
-                product_id: product.id,
+                product_id: product?.id ?? null,
                 sku_label: skuLabel,
                 storj_path: storjPath,
                 bucket_status: 'active',
                 google_drive_folder_path: file.path.split('/').slice(0, -1).join('/'),
                 last_upload_at: new Date().toISOString(),
               },
-              { onConflict: 'product_id', ignoreDuplicates: false },
+              { onConflict: 'sku_label', ignoreDuplicates: false },
             )
             .select('id, storj_path')
             .single()
